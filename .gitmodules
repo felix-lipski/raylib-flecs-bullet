@@ -1,0 +1,6 @@
+[submodule "libs/flecs"]
+	path = libs/flecs
+	url = https://github.com/SanderMertens/flecs.git
+[submodule "libs/bullet3"]
+	path = libs/bullet3
+	url = https://github.com/bulletphysics/bullet3.git
