@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(Game)
 
-add_executable(Game src/main.cpp)
+add_executable(Game src/main.cpp src/physics.cpp)
 target_include_directories(Game PRIVATE include)
 
 # raylib-cpp
