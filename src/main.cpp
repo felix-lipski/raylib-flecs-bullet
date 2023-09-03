@@ -1,5 +1,6 @@
 #include <flecs.h>
 #include <iostream>
+#include <cmath>
 #include "raylib-cpp.hpp"
 #include "btBulletDynamicsCommon.h"
 
@@ -23,6 +24,7 @@ struct Player {
 
 struct PlayerHead {
     raylib::Camera* camera;
+    Vector3 cameraDirection;
 };
 
 
@@ -46,14 +48,17 @@ flecs::entity initPlayer(flecs::world& ecs, btVector3 position) {
     body->setAngularFactor(angularFactor);
     ecs.get<PhysicsWorld>()->dynamicsWorld->addRigidBody(body);
 
-    /* raylib::Camera camera({ 10.0f, 2.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f); */
+    /* raylib::Camera *camera = new raylib::Camera({ .0f, .0f, 0.0f }, { .0f, .0f, .0f }, { .0f, .0f, .0f }, 70.0f); */
     /* raylib::Camera *camera = new raylib::Camera({ 10.0f, 2.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f); */
-    raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 45.0f);
+    /* raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 45.0f); */
+    /* raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 45.0f); */
+    raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 70.0f);
     /* ecs.entity().set(PlayerHead{&camera}); */
+    Vector3 direction = {0., 0., 1.0};
 
     return ecs.entity()
         .set(Player{body, height, radius, innerHeight})
-        .set(PlayerHead{camera}) ;
+        .set(PlayerHead{camera,direction}) ;
 }
 
 /* DrawCapsuleWires((Vector3){-3.0f, 1.5f, -4.0f}, (Vector3){-4.0f, -1.0f, -4.0f}, 1.2f, 8, 8, PURPLE); */
@@ -89,7 +94,7 @@ flecs::entity createCube(flecs::world& ecs, btVector3 position) {
     btTransform groundTransform;
     groundTransform.setIdentity();
     groundTransform.setOrigin(position);
-    btScalar mass(1.);
+    btScalar mass(10.);
     bool isDynamic = (mass != 0.f);
     btVector3 localInertia(0, 0, 0);
     if (isDynamic) groundShape->calculateLocalInertia(mass, localInertia);
@@ -101,11 +106,21 @@ flecs::entity createCube(flecs::world& ecs, btVector3 position) {
     return ecs.entity().set(Cube{body, model});
 }
 
+// Convert raylib Vector3 to Bullet btVector3
+btVector3 toBullet(const Vector3& vec) {
+  return btVector3(vec.x, vec.y, vec.z);
+}
+
+// Convert Bullet btVector3 to raylib Vector3
+Vector3 toRaylib(const btVector3& vec) {
+  return Vector3{vec.x(), vec.y(), vec.z()};
+}
+
 
 int main(int, char *[]) {
     raylib::Color textColor = raylib::Color::LightGray();
-    raylib::Window window(1000, 500, "raylib [core] example - basic window");
-    /* raylib::Window window(1920, 1080, "raylib [core] example - basic window"); */
+    /* raylib::Window window(1000, 500, "raylib [core] example - basic window"); */
+    raylib::Window window(1920, 1080, "raylib [core] example - basic window");
     SetTargetFPS(60);
     /* ToggleFullscreen(); */
     flecs::world ecs;
@@ -138,28 +153,62 @@ int main(int, char *[]) {
             ph.camera->position.y = centerPos.y() + (player.innerHeight/2);
             ph.camera->position.z = centerPos.z();
 
-            ph.camera->target.x = centerPos.x();
-            ph.camera->target.y = centerPos.y() + (player.innerHeight/2);
-            ph.camera->target.z = centerPos.z() + 2.0;
+            ph.camera->target.x = centerPos.x() + ph.cameraDirection.x;
+            ph.camera->target.y = centerPos.y() + ph.cameraDirection.y + (player.innerHeight/2);
+            ph.camera->target.z = centerPos.z() + ph.cameraDirection.z;
 
+            // head rotation
+            Vector2 mouseDelta = GetMouseDelta();
+            ph.cameraDirection = Vector3RotateByAxisAngle(ph.cameraDirection, Vector3{0., -1.0, 0.}, mouseDelta.x / 100);
+            Vector3 perp = Vector3Normalize( Vector3CrossProduct(ph.cameraDirection, Vector3{0., 1.0, 0.}) );
+            ph.cameraDirection = Vector3RotateByAxisAngle(ph.cameraDirection, perp, - mouseDelta.y / 100);
+            ph.cameraDirection = Vector3Normalize(ph.cameraDirection);
+
+            /* printf("%f, %f\n", mouseDelta.x, mouseDelta.y); */
             /* printf("%f\n",ph.camera->position.y); */
 
+            Vector3 desiredDirection = Vector3{0., 0., 0.};
+            /* btVector3 desiredDirection (0., 0., 0.); */
+            /* Vector2 desiredDirection = Vector2{0., 0.}; */
             /* forward */
             if (IsKeyDown(KEY_E)) {
-                player.capsule->applyCentralForce(btVector3(btScalar(0.), btScalar(0.), btScalar(10.)));
+                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, 1.0));
             }
             /* backward */
             if (IsKeyDown(KEY_D)) {
-                player.capsule->applyCentralForce(btVector3(btScalar(0.), btScalar(0.), btScalar(-10.)));
+                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, -1.0));
             }
             /* right */
-            if (IsKeyDown(KEY_S)) {
-                player.capsule->applyCentralForce(btVector3(btScalar(10.), btScalar(0.), btScalar(0.)));
+            if (IsKeyDown(KEY_F)) {
+                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, 1.0));
             }
             /* left */
-            if (IsKeyDown(KEY_F)) {
-                player.capsule->applyCentralForce(btVector3(btScalar(-10.), btScalar(0.), btScalar(0.)));
+            if (IsKeyDown(KEY_S)) {
+                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, -1.0));
             }
+
+            desiredDirection = Vector3Scale(desiredDirection, 100.0);
+
+            btVector3 btDesiredDirection = toBullet(desiredDirection);
+
+            btVector3 linVel = player.capsule->getLinearVelocity();
+
+            float maxSpeed = 4.0;
+            if (linVel.length() > maxSpeed) {
+                player.capsule->setLinearVelocity(linVel.normalized() * maxSpeed);
+            }
+
+            /* btVector3 linVel = player.capsule->getLinearVelocity(); */
+            /* linVel.setY(0.0); */
+            /* linVel.normalize(); */
+
+            /* float dot = linVel.dot(btDesiredDirection.normalized()); */
+            /* if (isnan(dot)) dot = 0; */
+            /* dot = (-dot + 1)/2; */
+
+            /* printf("%f\n", dot); */
+
+            player.capsule->applyCentralForce(btVector3(btScalar(desiredDirection.x), btScalar(0.), btScalar(desiredDirection.z)));
         });
 
     ecs.system<PhysicsWorld>("StepPhysics")
@@ -189,10 +238,11 @@ int main(int, char *[]) {
         .each([](Player& p) {
             /* renderPlayer(); */
             btVector3 centerPos = p.capsule->getCenterOfMassPosition();
-            DrawCapsuleWires(
-                    (Vector3){centerPos.x(), centerPos.y() - (p.innerHeight/2), centerPos.z()},
-                    (Vector3){centerPos.x(), centerPos.y() + (p.innerHeight/2), centerPos.z()},
-                    p.radius, 8, 8, PURPLE);
+            /* DrawCapsuleWires( */
+            /*         (Vector3){centerPos.x(), centerPos.y() - (p.innerHeight/2), centerPos.z()}, */
+            /*         (Vector3){centerPos.x(), centerPos.y() + (p.innerHeight/2), centerPos.z()}, */
+            /*         p.radius, 8, 8, PURPLE); */
+
             /* DrawCapsuleWires((Vector3){0.0f, p.radius, 0.0f}, (Vector3){0.0f, p.radius + p.innerHeight, 0.0f}, p.radius, 8, 8, GREEN); */
         });
 
