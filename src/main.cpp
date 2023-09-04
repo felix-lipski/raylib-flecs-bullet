@@ -53,6 +53,7 @@ flecs::entity initPlayer(flecs::world& ecs, btVector3 position) {
     /* raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 45.0f); */
     /* raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 45.0f); */
     raylib::Camera *camera = new raylib::Camera({ position.x(), position.y() + (height - radius), position.z() }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 70.0f);
+    /* raylib::Camera *camera = new raylib::Camera({ 0, 0, 0 }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 70.0f); */
     /* ecs.entity().set(PlayerHead{&camera}); */
     Vector3 direction = {0., 0., 1.0};
 
@@ -122,32 +123,17 @@ int main(int, char *[]) {
     /* raylib::Window window(1000, 500, "raylib [core] example - basic window"); */
     raylib::Window window(1920, 1080, "raylib [core] example - basic window");
     SetTargetFPS(60);
+    DisableCursor();
     /* ToggleFullscreen(); */
-    flecs::world ecs;
 
+    flecs::world ecs;
     btDiscreteDynamicsWorld* dynamicsWorld = initBullet();
     ecs.set(PhysicsWorld{dynamicsWorld});
-
-    /* raylib::Camera camera({ 10.0f, 2.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f); */
-    /* ecs.entity().set(PlayerHead{&camera}); */
-
-    DisableCursor();
-
-    /* ecs.system<PlayerHead>("UpdateHead") */
-    /*     .kind(flecs::OnUpdate) */
-    /*     .each([](PlayerHead& ph) { */
-    /*         if (IsKeyDown(KEY_W)) { */
-    /*             ph.camera->position.x += 0.1; */
-    /*         } */
-    /*         /1* ph.camera->position.x += 0.1; *1/ */
-    /*         /1* ph.camera->Update(CAMERA_FIRST_PERSON); *1/ */
-    /*         /1* ph.camera->Update(CAMERA_FREE); *1/ */
-    /*     }); */
 
     ecs.system<Player, PlayerHead>("Movement")
         .kind(flecs::OnUpdate)
         .each([](Player& player, PlayerHead& ph) {
-            /* btTransform = player.getCenterOfMassTransform(); */
+            // CAMERA
             btVector3 centerPos = player.capsule->getCenterOfMassPosition();
             ph.camera->position.x = centerPos.x();
             ph.camera->position.y = centerPos.y() + (player.innerHeight/2);
@@ -167,48 +153,44 @@ int main(int, char *[]) {
             /* printf("%f, %f\n", mouseDelta.x, mouseDelta.y); */
             /* printf("%f\n",ph.camera->position.y); */
 
+            // RUNNING
             Vector3 desiredDirection = Vector3{0., 0., 0.};
-            /* btVector3 desiredDirection (0., 0., 0.); */
-            /* Vector2 desiredDirection = Vector2{0., 0.}; */
-            /* forward */
-            if (IsKeyDown(KEY_E)) {
-                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, 1.0));
-            }
-            /* backward */
-            if (IsKeyDown(KEY_D)) {
-                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, -1.0));
-            }
-            /* right */
-            if (IsKeyDown(KEY_F)) {
-                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, 1.0));
-            }
-            /* left */
-            if (IsKeyDown(KEY_S)) {
-                desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, -1.0));
-            }
+
+            if (IsKeyDown(KEY_E)) desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, 1.0));
+            if (IsKeyDown(KEY_D)) desiredDirection = Vector3Add(desiredDirection, Vector3Scale(ph.cameraDirection, -1.0));
+            if (IsKeyDown(KEY_F)) desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, 1.0));
+            if (IsKeyDown(KEY_S)) desiredDirection = Vector3Add(desiredDirection, Vector3Scale(perp, -1.0));
 
             desiredDirection = Vector3Scale(desiredDirection, 100.0);
-
             btVector3 btDesiredDirection = toBullet(desiredDirection);
+            btDesiredDirection.normalize();
+            player.capsule->applyCentralForce(btVector3(btScalar(desiredDirection.x), btScalar(0.), btScalar(desiredDirection.z)));
 
             btVector3 linVel = player.capsule->getLinearVelocity();
-
+            btScalar currentY = linVel.y();
+            linVel.setY(0.0);
             float maxSpeed = 4.0;
             if (linVel.length() > maxSpeed) {
-                player.capsule->setLinearVelocity(linVel.normalized() * maxSpeed);
+                btVector3 vel = linVel.normalized() * maxSpeed;
+                vel.setY(currentY);
+                player.capsule->setLinearVelocity(vel);
             }
 
-            /* btVector3 linVel = player.capsule->getLinearVelocity(); */
-            /* linVel.setY(0.0); */
-            /* linVel.normalize(); */
+        });
 
-            /* float dot = linVel.dot(btDesiredDirection.normalized()); */
-            /* if (isnan(dot)) dot = 0; */
-            /* dot = (-dot + 1)/2; */
+    ecs.system<Player>("Jumping")
+        .kind(flecs::OnUpdate)
+        .each([&](Player& player) {
+            btVector3 from = player.capsule->getCenterOfMassPosition();
+			btVector3 to(from.x(), from.y() - 1, from.z());
 
-            /* printf("%f\n", dot); */
+			btCollisionWorld::ClosestRayResultCallback closestResults(from, to);
 
-            player.capsule->applyCentralForce(btVector3(btScalar(desiredDirection.x), btScalar(0.), btScalar(desiredDirection.z)));
+            ecs.get<PhysicsWorld>()->dynamicsWorld->rayTest(from, to, closestResults);
+
+            if (closestResults.hasHit() && IsKeyPressed(KEY_SPACE)) {
+                player.capsule->applyCentralImpulse(btVector3(btScalar(0.), btScalar(6.), btScalar(0.)));
+            }
         });
 
     ecs.system<PhysicsWorld>("StepPhysics")
@@ -269,7 +251,7 @@ int main(int, char *[]) {
         btRigidBody* body = new btRigidBody(rbInfo);
         dynamicsWorld->addRigidBody(body);
 
-        Model model = LoadModelFromMesh(GenMeshCube(20,20,20));
+        Model model = LoadModelFromMesh(GenMeshCube(0,0,0));
         flecs::entity cube1 = ecs.entity("Ground").set(Cube{body, model});
     }
 
