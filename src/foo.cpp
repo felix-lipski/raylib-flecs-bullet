@@ -19,6 +19,8 @@
 #include <cstdarg>
 #include <thread>
 
+#include "raylib-cpp.hpp"
+
 // Disable common warnings triggered by Jolt, you can use JPH_SUPPRESS_WARNING_PUSH / JPH_SUPPRESS_WARNING_POP to store and restore the warning state
 JPH_SUPPRESS_WARNINGS
 
@@ -250,6 +252,12 @@ public:
 
 
 int main(int argc, char** argv) {
+    raylib::Color textColor = raylib::Color::LightGray();
+    /* raylib::Window window(1000, 500, "raylib [core] example - basic window"); */
+    raylib::Window window(1920, 1080, "raylib [core] example - basic window");
+    SetTargetFPS(60);
+    /* DisableCursor(); */
+
 	RegisterDefaultAllocator();
     Fizyk * f = new Fizyk();
 
@@ -264,20 +272,55 @@ int main(int argc, char** argv) {
 	body_interface.AddBody(floor->GetID(), EActivation::DontActivate);
 
     // BALL
-	BodyCreationSettings sphere_settings(new SphereShape(0.5f), RVec3(0.0_r, 2.0_r, 0.0_r), Quat::sIdentity(), EMotionType::Dynamic, Layers::MOVING);
+	BodyCreationSettings sphere_settings(new SphereShape(0.5f), RVec3(0.0_r, 8.0_r, 0.0_r), Quat::sIdentity(), EMotionType::Dynamic, Layers::MOVING);
 	BodyID sphere_id = body_interface.CreateAndAddBody(sphere_settings, EActivation::Activate);
 
 	body_interface.SetLinearVelocity(sphere_id, Vec3(0.0f, -5.0f, 0.0f));
 
 	uint step = 0;
-	while (body_interface.IsActive(sphere_id))
-	{
+	/* while (body_interface.IsActive(sphere_id)) */
+	/* { */
+	/* 	++step; */
+	/* 	RVec3 position = body_interface.GetCenterOfMassPosition(sphere_id); */
+	/* 	Vec3 velocity = body_interface.GetLinearVelocity(sphere_id); */
+	/* 	cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << endl; */
+	/* 	f->update(); */
+	/* } */
+
+    raylib::Camera camera ({ 10.0f, 2.0f, 10.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, 45.0f);
+    Model model = LoadModelFromMesh(GenMeshCube(2,2,2));
+
+    while (!window.ShouldClose()) {
 		++step;
 		RVec3 position = body_interface.GetCenterOfMassPosition(sphere_id);
 		Vec3 velocity = body_interface.GetLinearVelocity(sphere_id);
 		cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << endl;
 		f->update();
-	}
+
+
+        const float radian_scale = 57.296;
+        RVec3 outPosition, outAxis;
+        Quat outRotation;
+        float angle;
+        body_interface.GetPositionAndRotation(sphere_id, outPosition, outRotation);
+        outRotation.GetAxisAngle(outAxis, angle);
+
+        Vector3 rposition = { outPosition.GetX(), outPosition.GetY(), outPosition.GetZ() };
+        Vector3 raxis = { outAxis.GetX(), outAxis.GetY(), outAxis.GetZ() };
+        angle *= radian_scale;
+
+
+        BeginDrawing();
+        ClearBackground( {(unsigned char)(0), (unsigned char)(0), (unsigned char)(128), 255});
+        camera.BeginMode();
+        DrawGrid(100, 1.0f);
+        DrawModelWiresEx(
+        	model, rposition, raxis, angle, {1,1,1},
+        	{(unsigned char)(255), (unsigned char)(0), (unsigned char)(255), 255}
+        );
+        EndMode3D();
+        EndDrawing();
+    }
 
 	body_interface.RemoveBody(sphere_id);
 	body_interface.DestroyBody(sphere_id);
