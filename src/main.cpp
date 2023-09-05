@@ -15,11 +15,19 @@ struct Cube {
     Model model;
 };
 
+enum PlayerState {
+    STANDING,
+    WALKING,
+    JUMPING,
+    FALLING
+};
+
 struct Player {
     btRigidBody* capsule;
     float height;
     float radius;
     float innerHeight;
+    PlayerState state;
 };
 
 struct PlayerHead {
@@ -56,9 +64,10 @@ flecs::entity initPlayer(flecs::world& ecs, btVector3 position) {
     /* raylib::Camera *camera = new raylib::Camera({ 0, 0, 0 }, { position.x(), position.y() + (height - radius), position.z() + 2.0f}, { 0.0f, 1.0f, 0.0f }, 70.0f); */
     /* ecs.entity().set(PlayerHead{&camera}); */
     Vector3 direction = {0., 0., 1.0};
+    PlayerState state = STANDING;
 
     return ecs.entity()
-        .set(Player{body, height, radius, innerHeight})
+        .set(Player{body, height, radius, innerHeight, state})
         .set(PlayerHead{camera,direction}) ;
 }
 
@@ -116,6 +125,7 @@ btVector3 toBullet(const Vector3& vec) {
 Vector3 toRaylib(const btVector3& vec) {
   return Vector3{vec.x(), vec.y(), vec.z()};
 }
+
 
 
 int main(int, char *[]) {
